@@ -1,0 +1,453 @@
+---
+title: "Daja Vu, 2021, winter project"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+1. 전체 데이터 확인 작업
+
+```{r}
+df <- read.table("dada\\funda_train.csv", header = T,  fileEncoding = "UTF-8", sep = ",")
+```
+
+```{r}
+head(df)
+tail(df)
+dim(df)
+
+df[df$amount > 400000, ]
+
+sum(is.na.data.frame(df))
+# type_of_business에 NULL이 있음
+# store_id, card_id는 범주형 수니까 패스
+summary(df[, 3:9])
+```
+
+```{r}
+attach(df)
+unique(type_of_business)
+summary(transacted_date)
+
+# transacted_date: 2016-06-01 ~ 2019-02-28
+dates = sort(unique(df$transacted_date))
+head(dates)
+tail(dates)
+```
+
+---
+
+2. 맡은 파트별로 카테고리 붙이기
+
+```{r}
+df %>% filter(type_of_business == "기타 미용업") %>%
+  head
+```
+
+```{r}
+ff = c("가정용 세탁업", "간판 및 광고물 제조업", "결혼 상담 및 준비 서비스업", "경영 컨설팅업",
+       "그 외 기타 분류 안된 사업지원 서비스업", "기록매체 복제업", "기타 건물 관련설비 설치 공사업",
+       "기타 엔지니어링 서비스업", "기타 일반 및 생활 숙박시설 운영업", "스포츠 및 레크리에이션 용품 임대업",
+       "애완동물 장묘 및 보호 서비스업", "애완용 동물 및 관련용품 소매업", "여관업", "여행사업", "예식장업",
+       "인물사진 및 행사용 영상 촬영업", "자동차 세차업", "자동차 전문 수리업", "자동차 종합 수리업",
+       "체형 등 기타 신체관리 서비스업", "통신장비 수리업", "택배업")
+# length(ff)
+
+rectified = c()
+for (i in ff) {
+  simple = df %>% filter(type_of_business == i)
+  simple["cate"] = "서비스업"
+  rectified = bind_rows(rectified, simple)
+}
+rectified %>% dim
+rectified %>% head
+```
+
+```{r}
+rectified[rectified$type_of_business == "택배업", "cate"] = "유통업"
+rectified %>% filter(cate == "서비스업") %>% dim
+rectified %>% filter(cate == "유통업") %>% dim
+```
+
+```{r}
+write.csv(rectified, "업종_서비스유통.csv")
+# write.csv(rectified, "업종_서비스.csv")
+# write.csv(rectified, "업종_유통.csv")
+```
+
+---
+
+3. 변수로 취급할 것들
+
+- 날짜(transacted_date일, 월), 시간(transacted_time), 분류(cate), 판매량(amount)
+
+```{r message = F}
+# 한 번 확인해보려고 했으나
+library(dplyr)
+# plot(df$type_of_business, df$amount)
+# corrplot(df$type_of_business, df$amount)
+
+library(ggplot2)
+# df %>% filter(type_of_business, amount) %>%
+#   group_by(type_of_business) %>%
+#   summarise(summ = sum(amount)) %>%
+#   ggplot()
+```
+
+3-1. 판매량을 변수로 이용해볼 순 없는 걸까.
+
+```{r}
+rectified %>%
+  # filter(between(transacted_date, unique(rectified$transacted_date)[1], unique(rectified$transacted_date)[185])) %>%
+  group_by(cate, transacted_date) %>%
+  summarise(sumV = sum(amount)) %>%
+  # summarise(minV = min(amount), medianV = median(amount), meanV = mean(amount), maxV = max(amount)) %>%
+  ggplot(aes(color = cate)) +
+  geom_point(aes(x = transacted_date, y = sumV))
+
+# 그냥 그려봤는데 이상해서 확인해보고 싶었다.
+length(rectified$card_id)
+summary(rectified$card_id)
+
+length(unique(rectified[rectified$amount < 0, "card_id"]))
+summary(rectified$amount)
+```
+
+```{r}
+# 뭔가 이상한데, 원 데이터는 어떻게 보일까.
+rectified = read.csv(file.choose(), header = T)
+head(rectified)
+
+rectified %>%
+  ggplot(aes(x = type_of_business, y = amount)) +
+  geom_boxplot()
+
+colnames(rectified)
+length(rectified$amount)
+```
+
+- 결론: 판매량이 보통 이용하는 돈의 단위가 아니라서 안 될 것 같음.
+
+<br />
+
+3-2. 그렇다면 카드를 긁은 시간은 어떨까.
+
+- 우리가 만든 카테고리로 '전체'를 먼저 만들자.
+
+```{r}
+total = c()
+# 원래 for문, 읽어와서 규격에 맞추고 합치고.
+part = read.csv(file.choose(), header = T)
+part %>% head
+colnames(part)
+coln = colnames(part)
+if (coln[1] != "store_id" && dim(part)[2] > 9) {
+  part = part[, 2:dim(part)[2]]
+}
+part["cate"] = "휴게 음식점"
+total = bind_rows(total, part)
+
+total %>% dim
+write.csv(total, "total.csv")
+total = read.csv("total.csv")
+total %>% dim
+```
+
+그냥 얘기하는 거에서 확인해보고 싶었던 것들.
+
+```{r include = F}
+rectified[rectified$transacted_time >= 3, ]
+rectified[rectified$transacted_time == "00:25", "amount"]
+```
+
+3-2-1. 전체에서 시각적으로 확인해보자.
+
+```{r}
+total = read.csv(file.choose(), header = T)
+total %>% head
+```
+
+```{r}
+total %>%
+  # filter(cate != "일반 음식점") %>%
+  group_by(cate, transacted_time) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  ggplot(aes(color = cate)) +
+  geom_point(aes(x = transacted_time, y = times)) +
+  geom_vline(xintercept = c("3:00", "6:00", "9:00", "12:00", "15:00", "18:00", "21:00"))
+  # guides(color = F)
+```
+
+역시 판매량은 쓸 수 없을 것 같다.
+
+<br />
+
+3-2-2. category별로 할 순 없는 걸까. (무언가 문제가 발생했다.)
+
+```{r include = F}
+# par(mfrow = c(4, 3))
+# cate = c("교육", "미용", "서비스업", "오락 및 여가", "유통업", "음식소매업", "의료", "의류", "일반 음식점", "전자기기", "휴게 음식점")
+# for (cat in cate) {
+#   total %>%
+#     filter(cate == cat) %>%
+#     group_by(transacted_time) %>%
+#     summarise(times = length(amount), .groups = "drop") %>%
+#     ggplot() +
+#     geom_point(aes(x = transacted_time, y = times)) +
+#     xlab(cat) %>%
+#     show
+#   print(cat)
+# }
+```
+
+으악 SQL 쓰고 싶다<br />
+아이디별로 다르게, refund = sum(amount < 0)<br />
+이건 되는데, for문 이용은 왜 안 되냐.
+
+```{r}
+total %>% filter(cate == "일반 음식점") %>%
+  group_by(store_id, transacted_time) %>%
+  summarise(times = length(amount)) %>%
+  ggplot(aes(color = store_id)) +
+  geom_point(aes(x = transacted_time, y = times))
+# length(unique(total[total$cate == "일반 음식점", "store_id"]))
+```
+
+4. test 데이터를 store_id 기준, 시간 순으로 판매횟수를 시각화 해보자.
+
+```{r}
+test_tt = read.csv(file.choose(), header = T, stringsAsFactors = F)
+test_tt %>% head
+```
+
+- 40 ~ 79
+
+```{r}
+part = test_tt %>% filter(between(store_id, 40, 79))
+part %>% head
+part %>% select(time) %>% unlist %>% sort %>% head
+```
+
+```{r}
+part %>%
+  group_by(store_id, time) %>%
+  summarise(times = length(amount)) %>%
+  .["times"] %>% summary
+```
+
+```{r}
+part %>%
+  mutate(part = format(as.POSIXct(time, format = "%H:%M:%S"), "%H:%M")) %>%
+  # head
+  group_by(store_id, part) %>%
+  summarise(times = length(amount)) %>%
+  .["times"] %>% summary
+```
+
+test 데이터에는 초가 달려있다. 없애자.
+
+```{r}
+final = part %>%
+  mutate(part = format(as.POSIXct(time, format = "%H:%M:%S"), "%H:%M")) %>%
+  group_by(store_id, part) %>%
+  summarise(times = length(amount))
+```
+
+4-1. 통합 (40 - 79)
+
+```{r}
+final %>%
+  ggplot(aes(color = factor(store_id))) +
+  geom_point(aes(x = part, y = times)) +
+  geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
+  labs(color = NULL)
+```
+
+4-2. 10개씩 (40-49, 50-59, 60-69, 70-79)
+
+```{r}
+final %>%
+  ggplot(aes(color = factor(store_id %% 10))) +
+  facet_grid(rows = vars(store_id %/% 10)) +
+  geom_point(aes(x = part, y = times)) +
+  geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
+  # ggtitle("40~49, 50~59, 60~69, 70~79") +
+  labs(color = NULL)
+```
+
+번외: 선으로 표현
+
+```{r}
+final %>%
+  ggplot(aes(color = factor(store_id %% 10))) +
+  facet_grid(rows = vars(store_id %/% 10)) +
+  geom_line(aes(x = part, y = times, group = store_id %% 10)) +
+  geom_vline(xintercept = c("9:00", "12:00", "15:00", "18:00", "21:00")) +
+  # ggtitle("40~49, 50~59, 60~69, 70~79") +
+  labs(x = NULL, y = NULL, color = NULL)
+```
+
+```{r}
+for (i in 4:7) {
+  start = i * 10
+  finish = start + 9
+
+  name = paste("test_point", start, "-", finish, ".jpg", sep = "")
+  jpeg(name, width = 800, height = 600)
+  plotting = final %>%
+    filter(between(store_id, start, finish)) %>%
+    ggplot(aes(color = factor(store_id))) +
+    geom_point(aes(x = part, y = times)) +
+    # geom_line(aes(x = part, y = times, group = store_id %% 10)) +
+    geom_vline(xintercept = "12:00") + #, color = "orange") +
+    geom_vline(xintercept = "15:00") + #, color = "green") +
+    geom_vline(xintercept = "18:00") + #, color = "blue") +
+    geom_vline(xintercept = "21:00") + #, color = "purple") +
+    labs(color = NULL)
+  print(plotting)
+  dev.off()
+}
+```
+
+번외: colormap 이용
+
+```{r include = F}
+library(scales)
+library(RColorBrewer)
+final %>%
+  ggplot(aes(color = factor(store_id %% 10))) +
+  facet_grid(rows = vars(store_id %/% 10)) +
+  geom_point(aes(x = part, y = times)) +
+  scale_color_brewer(palette = "Paired") + 
+  geom_vline(xintercept = c("3:00", "6:00", "9:00", "12:00", "15:00", "18:00", "21:00")) +
+  # ggtitle("40~49, 50~59, 60~69, 70~79") +
+  labs(color = NULL)
+```
+
+4-3. 5개씩 (40-44, 45-49, 50-54, 55-59, 60-64, 65-69, 70-74, 75-79)
+
+```{r}
+final %>%
+  ggplot(aes(color = factor(store_id %% 5))) +
+  facet_grid(rows = vars(store_id %/% 5)) +
+  geom_point(aes(x = part, y = times)) +
+  geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
+  labs(color = NULL)
+```
+
+```{r}
+i = 4
+```
+
+```{r}
+i = i + 1
+final %>%
+  filter(between(store_id, i * 10, i * 10 + 9)) %>%
+  ggplot(aes(color = factor(store_id %% 5))) +
+  facet_grid(rows = vars(store_id %/% 5)) +
+  geom_point(aes(x = part, y = times)) +
+  geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
+  ylim(0, 85) +
+  labs(color = NULL)
+```
+
+다음 반복을 위한 초깃값일 뿐.
+
+
+```{r}
+final %>%
+  mutate(part = format(as.POSIXct(part, format = "%H:%M"), "%H")) %>%
+  group_by(store_id, part) %>%
+  summarise(times = sum(times)) %>%
+  filter(store_id == nn)
+
+final %>%
+  mutate(part = as.POSIXct(part, format = "%H:%M")) %>% head
+  group_by(store_id, part) %>%
+  summarise(times = sum(times)) %>%
+  filter(store_id == nn)
+```
+
+```{r}
+nn = 40
+```
+
+```{r}
+nn = nn + 1
+final %>% filter(store_id == nn) %>%
+  ggplot(aes(color = factor(store_id))) +
+  geom_point(aes(x = part, y = times)) +
+  geom_vline(xintercept = "12:00") + #, color = "black") +
+  geom_vline(xintercept = "15:00") + #, color = "grey15") +
+  geom_vline(xintercept = "18:00") + #, color = "yellow") +
+  geom_vline(xintercept = "21:00") #+ #, color = "orange") # +
+  # scale_x_continuous(breaks = c()) + 
+  # scale_x_datetime(breaks = date_breaks("1 min"), labels = date_format("%H:%M"))
+```
+
+아주 다행히 다들 선이 잘 나오는 듯하다. 난 안 나와서 별 짓을 했지만, 다행.
+
+- 40: 타입 1, 점심에 급격히, 저녁도 못 미치지만, 30 정도의 상승세를 보임.
+- 41: 타입 6, 음. 바닥을 김.
+- 42: 타입 4, 전형적인 낮에는 매출이 없고, 저녁에 그것도 6시 이후에 매출이 상승하는 형태.
+- 43: 타입 5, 전체적으로 매출이 있는 형태
+- 44: 타입 3, 굉장히 작은 횟수지만, 점심 ~ 낮에 매출이 뛴다.
+- 45: 타입 6, 아침, 낮, 이른 저녁까지 매출이 없음.
+- 46: 타입 4, 천천히 오르다 저녁에 피크를 찍는다.
+- 47: 타입 6, 45와 동일
+- 48: 타입 4, 저녁 그것도 이른 밤부터 매출이 미친 듯이 뛴다.
+- 49: 타입 1, 그림에선 제대로 보이지 않지만, 정확히 점심과 저녁에 매출이 뛴다.
+- 50: 타입 4, 46과 동일
+- 51: 타입 6, 45와 동일
+- 52: 타입 1, 완전 정확하지 않지만, 타입 4보단 1인 것 같다.
+- 53: 타입 6, 45와 동일인데, 매출이 많은 편인 45?
+- 54: 타입 1, 일단 쌍봉으로 본다, 저녁에 매출에 더 큰 편. 52랑 유사.
+- 55: 타입 1, 54와 동일
+- 56: 타입 1, 54와 동일
+- 57: 타입 4, 상대적으로 저녁이 매우 매출이 높음.
+- 58: 타입 1, 완벽한 쌍봉, 그것도 점심의 매출이 높은.
+- 59: 타입 4, 이 가게는 새벽 매출도 꽤 높은 편.
+- 60: 타입 4, 59와 동일
+- 61: 타입 4, 저녁보다는 밤에 매출이 많은 듯 보이지만, 일단 그림상 4에 속함.
+- 62: 타입 1, 점심이 높은 쌍봉.
+- 63: 타입 1, 매출이 많다면 완벽한 쌍봉일 것 같은 느낌.
+- 64: 타입 6, 45와 동일
+- 65: 타입 6, 45의 매출이 많은 버전?
+- 66: 타입 6, 45 패턴, 45의 매출이 살짝 많은 버전.
+- 67: 타입 5, 매출이 너무 고르다, 너무너무.
+- 68: 타입 4, 저녁 매출만 있다.
+- 69: 타입 5, 어떻게 이렇게 매출이 고를 수가 있지.
+- 70: 타입 4, 적당히 적은 매출.
+- 71: 타입 5, 이른 아침엔 매출이 없지만, 굉장히 고른 매출.
+- 72: 타입 1, 일단 쌍봉이긴 한데, 점심 매출이 최고다.
+- 73: 타입 6, 45와 동일인데, 이 유형 술집인가.
+- 74: 타입 1, 쌍봉, 아름다운 쌍봉.
+- 75: 타입 4, 46과 동일.
+- 76: 타입 4, 46과 동일.
+- 77: 타입 4, 46과 동일. 매출이 전체적으로 많은 버전.
+- 78: 타입 1, 총합 매출은 점심이 많지만, 순간 매출은 저녁이 높은 쌍봉.
+- 79: 타입 3, 딱 2개밖에 못 본 점심 피크 후 (천천히) 줄어드는 매출.
+
+번외: 그림으로 저장하기
+
+```{r}
+for (i in 4:7) {
+  start = i * 10
+  finish = start + 9
+  name = paste("test_part_line_", start, "-", finish, ".jpg", sep = "")
+  # name = paste("test_part_", start, "-", finish, ".jpg", sep = "")
+  jpeg(name, width = 600, height = 600)
+  plotting = final %>% filter(between(store_id, start, finish)) %>%
+    ggplot(aes(color = factor(store_id))) +
+    geom_line(aes(x = part, y = times, group = store_id)) +
+    # geom_point(aes(x = part, y = times)) +
+    labs(color = NULL)
+  print(plotting)
+  dev.off()
+}
+```
+
+```{r}
+```

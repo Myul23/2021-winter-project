@@ -160,3 +160,67 @@ total %>% filter(cate == "일반 음식점") %>%
   ggplot(aes(color = store_id)) +
   geom_point(aes(x = transacted_time, y = times))
 # length(unique(total[total$cate == "일반 음식점", "store_id"]))
+
+test_tt = read.csv(file.choose(), header = T, stringsAsFactors = F)
+part = test_tt %>% filter(between(store_id, 40, 79))
+
+final = part %>%
+  mutate(part = format(as.POSIXct(time, format = "%H:%M:%S"), "%H:%M")) %>%
+  group_by(store_id, part) %>%
+  summarise(times = length(amount))
+
+final %>%
+  ggplot(aes(color = factor(store_id %% 10))) +
+  facet_grid(rows = vars(store_id %/% 10)) +
+  geom_point(aes(x = part, y = times)) +
+  geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
+  # ggtitle("40~49, 50~59, 60~69, 70~79") +
+  labs(color = NULL)
+
+final %>%
+  ggplot(aes(color = factor(store_id %% 10))) +
+  facet_grid(rows = vars(store_id %/% 10)) +
+  geom_line(aes(x = part, y = times, group = store_id %% 10)) +
+  geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
+  # ggtitle("40~49, 50~59, 60~69, 70~79") +
+  labs(color = NULL)
+
+# 그림으로 저장.
+
+for (i in 4:7) {
+  start = i * 10
+  finish = start + 9
+  name = paste("test_part_", start, "-", finish, ".jpg", sep = "")
+  jpeg(name, width = 1200, height = 600)
+  plotting = final %>% filter(between(store_id, start, finish)) %>%
+    ggplot(aes(color = factor(store_id))) +
+    geom_point(aes(x = part, y = times)) +
+    labs(color = NULL)
+  print(plotting)
+  dev.off()
+}
+
+for (i in 4:7) {
+  start = i * 10
+  finish = start + 9
+  name = paste("test_part_line_", start, "-", finish, ".jpg", sep = "")
+  jpeg(name, width = 1200, height = 600)
+  plotting = final %>% filter(between(store_id, start, finish)) %>%
+    ggplot(aes(color = factor(store_id))) +
+    geom_line(aes(x = part, y = times, group = store_id)) +
+    labs(color = NULL)
+  print(plotting)
+  dev.off()
+}
+
+name = paste("test__.jpg", sep = "")
+jpeg(name, width = 1200, height = 600)
+plotting = final %>%
+  ggplot(aes(color = factor(store_id %% 10))) +
+  facet_grid(rows = vars(store_id %/% 10)) +
+  geom_line(aes(x = part, y = times, group = store_id %% 10)) +
+  geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
+  # ggtitle("40~49, 50~59, 60~69, 70~79") +
+  labs(x = NULL, y = NULL, color = NULL)
+print(plotting)
+dev.off()

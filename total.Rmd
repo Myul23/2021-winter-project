@@ -137,21 +137,27 @@ length(rectified$amount)
 - 우리가 만든 카테고리로 '전체'를 먼저 만들자.
 
 ```{r}
+categories = c("교육", "미용", "생활용품 소매업", "서비스업", "오락 및 여가", "유통업", "음식소매업", "의료", "의류", "일반 음식점", "전자기기", "휴게 음식점")
 total = c()
-# 원래 for문, 읽어와서 규격에 맞추고 합치고.
-part = read.csv(file.choose(), header = T)
-part %>% head
-colnames(part)
-coln = colnames(part)
-if (coln[1] != "store_id" && dim(part)[2] > 9) {
-  part = part[, 2:dim(part)[2]]
+for (i in categories) {
+  part = read.csv(file.choose(), header = T)
+  if (colnames(part)[1] != "store_id") {
+    part = part[, colnames(part)[-c(1)]]
+  }
+  if (length(colnames(part)) < 10) {
+    part["cate"] = i
+  }
+  coln = colnames(part)
+  if (tail(coln, 1) != "cate") {
+    colnames(part)[length(coln)] = "cate"
+  }
+  total = bind_rows(total, part)
 }
-part["cate"] = "휴게 음식점"
-total = bind_rows(total, part)
-
 total %>% dim
+total %>% head
+
 write.csv(total, "total.csv")
-total = read.csv("total.csv")
+total = read.csv("total.csv", header = T)
 total %>% dim
 ```
 

@@ -101,21 +101,28 @@ length(rectified$amount)
 
 # 3-2. 그렇다면 카드를 긁은 시간은 어떨까.
 # 우리가 만든 카테고리로 '전체'를 먼저 만들자.
-total = c()
 # 원래 for문, 읽어와서 규격에 맞추고 합치고.
-part = read.csv(file.choose(), header = T)
-part %>% head
-colnames(part)
-coln = colnames(part)
-if (coln[1] != "store_id" && dim(part)[2] > 9) {
-  part = part[, 2:dim(part)[2]]
+categories = c("교육", "미용", "생활용품 소매업", "서비스업", "오락 및 여가", "유통업", "음식소매업", "의료", "의류", "일반 음식점", "전자기기", "휴게 음식점")
+total = c()
+for (i in categories) {
+  part = read.csv(file.choose(), header = T)
+  if (colnames(part)[1] != "store_id") {
+    part = part[, colnames(part)[-c(1)]]
+  }
+  if (length(colnames(part)) < 10) {
+    part["cate"] = i
+  }
+  coln = colnames(part)
+  if (tail(coln, 1) != "cate") {
+    colnames(part)[length(coln)] = "cate"
+  }
+  total = bind_rows(total, part)
 }
-part["cate"] = "휴게 음식점"
-total = bind_rows(total, part)
-
 total %>% dim
+total %>% head
+
 write.csv(total, "total.csv")
-total = read.csv("total.csv")
+total = read.csv("total.csv", header = T)
 total %>% dim
 
 # 그냥 얘기하는 거에서 확인해보고 싶었던 것들.
@@ -127,7 +134,7 @@ total %>% dim
 total %>%
   # filter(cate != "일반 음식점") %>%
   group_by(cate, transacted_time) %>%
-  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  summarise(times = length(amount)) %>% # , refund = sum(amount < 0)
   ggplot(aes(color = cate)) +
   geom_point(aes(x = transacted_time, y = times)) +
   geom_vline(xintercept = c("9:00", "12:00", "15:00", "18:00", "21:00"))
@@ -138,7 +145,7 @@ total %>%
 
 # 3-2-2. category별로 할 순 없는 걸까. (무언가 문제가 발생했다.)
 # par(mfrow = c(4, 3))
-# cate = c("교육", "미용", "서비스업", "오락 및 여가", "유통업", "음식소매업", "의료", "의류", "일반 음식점", "전자기기", "휴게 음식점")
+# cate = c("교육", "미용", "생활용품 소매업", "서비스업", "오락 및 여가", "유통업", "음식소매업", "의료", "의류", "일반 음식점", "전자기기", "휴게 음식점")
 # for (cat in cate) {
 #   total %>%
 #     filter(cate == cat) %>%

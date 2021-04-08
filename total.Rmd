@@ -7,22 +7,40 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE, warning = F)
 ```
 
+0. 사용한 패키지 모음
+
+```{r message = F}
+library(tidyverse)
+library(gridExtra)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(xlsx)
+```
+
+---
+
+## Train data를 통해 확인하자.
+
 1. 전체 데이터 확인 작업
 
 ```{r}
-df <- read.table("dada\\funda_train.csv", header = T,  fileEncoding = "UTF-8", sep = ",")
+df <- read.table("origin_data\\funda_train.csv", header = T,  fileEncoding = "UTF-8", sep = ",", stringsAsFactors = F)
 ```
 
 ```{r}
 head(df)
 tail(df)
 dim(df)
-
 df[df$amount > 400000, ]
 
 sum(is.na.data.frame(df))
-# type_of_business에 NULL이 있음
-# store_id, card_id는 범주형 수니까 패스
+```
+
+type_of_business에 NULL이 있음<br />
+store_id, card_id는 범주형 수니까 패스
+
+```{r}
 summary(df[, 3:9])
 ```
 
@@ -42,11 +60,6 @@ tail(dates)
 2. 맡은 파트별로 카테고리 붙이기
 
 ```{r}
-df %>% filter(type_of_business == "기타 미용업") %>%
-  head
-```
-
-```{r}
 ff = c("가정용 세탁업", "간판 및 광고물 제조업", "결혼 상담 및 준비 서비스업", "경영 컨설팅업",
        "그 외 기타 분류 안된 사업지원 서비스업", "기록매체 복제업", "기타 건물 관련설비 설치 공사업",
        "기타 엔지니어링 서비스업", "기타 일반 및 생활 숙박시설 운영업", "스포츠 및 레크리에이션 용품 임대업",
@@ -54,19 +67,21 @@ ff = c("가정용 세탁업", "간판 및 광고물 제조업", "결혼 상담 �
        "인물사진 및 행사용 영상 촬영업", "자동차 세차업", "자동차 전문 수리업", "자동차 종합 수리업",
        "체형 등 기타 신체관리 서비스업", "통신장비 수리업", "택배업")
 # length(ff)
+```
 
+```{r}
 rectified = c()
 for (i in ff) {
   simple = df %>% filter(type_of_business == i)
   simple["cate"] = "서비스업"
   rectified = bind_rows(rectified, simple)
 }
-rectified %>% dim
+rectified[rectified$type_of_business == "택배업", "cate"] = "유통업"
 rectified %>% head
 ```
 
 ```{r}
-rectified[rectified$type_of_business == "택배업", "cate"] = "유통업"
+rectified %>% dim
 rectified %>% filter(cate == "서비스업") %>% dim
 rectified %>% filter(cate == "유통업") %>% dim
 ```
@@ -83,17 +98,9 @@ write.csv(rectified, "업종_서비스유통.csv")
 
 - 날짜(transacted_date일, 월), 시간(transacted_time), 분류(cate), 판매량(amount)
 
-```{r message = F}
-# 한 번 확인해보려고 했으나
-library(dplyr)
-# plot(df$type_of_business, df$amount)
-# corrplot(df$type_of_business, df$amount)
-
-library(ggplot2)
-# df %>% filter(type_of_business, amount) %>%
-#   group_by(type_of_business) %>%
-#   summarise(summ = sum(amount)) %>%
-#   ggplot()
+```{r eval = F}
+plot(df$type_of_business, df$amount)
+corrplot(df$type_of_business, df$amount)
 ```
 
 3-1. 판매량을 변수로 이용해볼 순 없는 걸까.
@@ -106,26 +113,14 @@ rectified %>%
   # summarise(minV = min(amount), medianV = median(amount), meanV = mean(amount), maxV = max(amount)) %>%
   ggplot(aes(color = cate)) +
   geom_point(aes(x = transacted_date, y = sumV))
-
-# 그냥 그려봤는데 이상해서 확인해보고 싶었다.
-length(rectified$card_id)
-summary(rectified$card_id)
-
-length(unique(rectified[rectified$amount < 0, "card_id"]))
-summary(rectified$amount)
 ```
 
-```{r}
-# 뭔가 이상한데, 원 데이터는 어떻게 보일까.
-rectified = read.csv(file.choose(), header = T)
-head(rectified)
+뭔가 이상한데, 원 데이터는 어떻게 보일까.
 
-rectified %>%
+```{r}
+df %>%
   ggplot(aes(x = type_of_business, y = amount)) +
   geom_boxplot()
-
-colnames(rectified)
-length(rectified$amount)
 ```
 
 - 결론: 판매량이 보통 이용하는 돈의 단위가 아니라서 안 될 것 같음.
@@ -155,72 +150,83 @@ for (i in categories) {
 }
 total %>% dim
 total %>% head
-
 write.csv(total, "total.csv")
-total = read.csv("total.csv", header = T)
-total %>% dim
 ```
 
-그냥 얘기하는 거에서 확인해보고 싶었던 것들.
-
-```{r include = F}
-rectified[rectified$transacted_time >= 3, ]
-rectified[rectified$transacted_time == "00:25", "amount"]
+```{r eval = F}
+total = read.csv(file.choose(), header = T)
+total %>% select(transacted_date) %>% unique %>% sort %>% head
 ```
 
 3-2-1. 전체에서 시각적으로 확인해보자.
 
 ```{r}
-total = read.csv(file.choose(), header = T)
-total %>% head
-```
-
-```{r}
 total %>%
-  # filter(cate != "일반 음식점") %>%
   group_by(cate, transacted_time) %>%
-  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  summarise(times = length(amount)) %>%
+  mutate(part = as.POSIXct(transacted_time, format = "%H:%M")) %>%
   ggplot(aes(color = cate)) +
-  geom_point(aes(x = transacted_time, y = times)) +
-  geom_vline(xintercept = c("3:00", "6:00", "9:00", "12:00", "15:00", "18:00", "21:00"))
-  # guides(color = F)
+  geom_point(aes(x = part, y = times)) +
+  scale_x_datetime(date_labels = "%H:%M") +
+  # geom_vline(xintercept = as.numeric(dt_val$dt[3]), color = "red", linetype = 2)
+  labs(x = NULL, y = NULL, color = NULL)
 ```
 
-역시 판매량은 쓸 수 없을 것 같다.
+- 역시 코딩으로 저장이 최고다.
+
+```{r eval = F}
+name = paste("total_time.jpg", sep = "")
+jpeg(name, width = 1200, height = 600)
+plotting = total %>%
+  group_by(cate, transacted_time) %>%
+  summarise(times = length(amount)) %>%
+  mutate(part = as.POSIXct(transacted_time, format = "%H:%M")) %>%
+  ggplot(aes(color = cate)) +
+  geom_point(aes(x = part, y = times)) +
+  scale_x_datetime(date_labels = "%H:%M") +
+  # geom_vline(xintercept = as.numeric(dt_val$dt[3]), color = "red", linetype = 2)
+  labs(x = NULL, y = NULL, color = NULL)
+print(plotting)
+dev.off()
+```
+
+결론: 역시 판매량은 쓸 수 없을 것 같다.
 
 <br />
 
-3-2-2. category별로 할 순 없는 걸까. (무언가 문제가 발생했다.)
+3-2-2. category별로 할 순 없는 걸까.
 
 ```{r include = F}
-# par(mfrow = c(4, 3))
-# cate = c("교육", "미용", "서비스업", "오락 및 여가", "유통업", "음식소매업", "의료", "의류", "일반 음식점", "전자기기", "휴게 음식점")
-# for (cat in cate) {
-#   total %>%
-#     filter(cate == cat) %>%
-#     group_by(transacted_time) %>%
-#     summarise(times = length(amount), .groups = "drop") %>%
-#     ggplot() +
-#     geom_point(aes(x = transacted_time, y = times)) +
-#     xlab(cat) %>%
-#     show
-#   print(cat)
-# }
+total %>%
+  group_by(cate, transacted_time) %>%
+  summarise(times = length(amount)) %>%
+  mutate(part = as.POSIXct(transacted_time, format = "%H:%M")) %>%
+  ggplot(aes(color = cate)) +
+  facet_grid(cate ~ .) +
+  geom_point(aes(x = part, y = times)) +
+  scale_x_datetime(date_labels = "%H:%M") +
+  guides(color = F)
 ```
 
-으악 SQL 쓰고 싶다<br />
-아이디별로 다르게, refund = sum(amount < 0)<br />
-이건 되는데, for문 이용은 왜 안 되냐.
+3-3. custom 카테고리 X 요일의 조합은 어떨까.
 
 ```{r}
-total %>% filter(cate == "일반 음식점") %>%
-  group_by(store_id, transacted_time) %>%
+total %>%
+  mutate(part = factor(wday(transacted_date))) %>%
+  group_by(cate, part) %>%
   summarise(times = length(amount)) %>%
-  ggplot(aes(color = store_id)) +
-  geom_point(aes(x = transacted_time, y = times))
-# length(unique(total[total$cate == "일반 음식점", "store_id"]))
+  ggplot(aes(color = cate)) +
+  geom_line(aes(x = part, y = times, group = cate)) +
+  scale_x_discrete(label = c("일", "월", "화", "수", "목", "금", "토"))
 ```
 
+<br /><br /><br />
+
+---
+
+## Test data를 이용해 확인해보자.
+
+<!--
 4. test 데이터를 store_id 기준, 시간 순으로 판매횟수를 시각화 해보자.
 
 ```{r}
@@ -228,7 +234,7 @@ test_tt = read.csv(file.choose(), header = T, stringsAsFactors = F)
 test_tt %>% head
 ```
 
-- 40 ~ 79
+맡은 구역은 40 ~ 79
 
 ```{r}
 part = test_tt %>% filter(between(store_id, 40, 79))
@@ -236,23 +242,22 @@ part %>% head
 part %>% select(time) %>% unlist %>% sort %>% head
 ```
 
+test 데이터에는 초가 달려있다.
+
 ```{r}
 part %>%
   group_by(store_id, time) %>%
   summarise(times = length(amount)) %>%
   .["times"] %>% summary
-```
 
-```{r}
 part %>%
   mutate(part = format(as.POSIXct(time, format = "%H:%M:%S"), "%H:%M")) %>%
-  # head
   group_by(store_id, part) %>%
   summarise(times = length(amount)) %>%
   .["times"] %>% summary
 ```
 
-test 데이터에는 초가 달려있다. 없애자.
+없애자.
 
 ```{r}
 final = part %>%
@@ -279,28 +284,16 @@ final %>%
   facet_grid(rows = vars(store_id %/% 10)) +
   geom_point(aes(x = part, y = times)) +
   geom_vline(xintercept = c("12:00", "15:00", "18:00", "21:00")) +
-  # ggtitle("40~49, 50~59, 60~69, 70~79") +
   labs(color = NULL)
 ```
 
-번외: 선으로 표현
-
-```{r}
-final %>%
-  ggplot(aes(color = factor(store_id %% 10))) +
-  facet_grid(rows = vars(store_id %/% 10)) +
-  geom_line(aes(x = part, y = times, group = store_id %% 10)) +
-  geom_vline(xintercept = c("9:00", "12:00", "15:00", "18:00", "21:00")) +
-  # ggtitle("40~49, 50~59, 60~69, 70~79") +
-  labs(x = NULL, y = NULL, color = NULL)
-```
-
-```{r}
+```{r eval = F}
 for (i in 4:7) {
   start = i * 10
   finish = start + 9
 
   name = paste("test_point", start, "-", finish, ".jpg", sep = "")
+  # name = paste("test_part_line_", start, "-", finish, ".jpg", sep = "")
   jpeg(name, width = 800, height = 600)
   plotting = final %>%
     filter(between(store_id, start, finish)) %>%
@@ -317,10 +310,20 @@ for (i in 4:7) {
 }
 ```
 
+번외: 선으로 표현
+
+```{r}
+final %>%
+  ggplot(aes(color = factor(store_id %% 10))) +
+  facet_grid(rows = vars(store_id %/% 10)) +
+  geom_line(aes(x = part, y = times, group = store_id %% 10)) +
+  geom_vline(xintercept = c("9:00", "12:00", "15:00", "18:00", "21:00")) +
+  labs(x = NULL, y = NULL, color = NULL)
+```
+
 번외: colormap 이용
 
-```{r include = F}
-library(scales)
+```{r eval = F}
 library(RColorBrewer)
 final %>%
   ggplot(aes(color = factor(store_id %% 10))) +
@@ -343,6 +346,8 @@ final %>%
   labs(color = NULL)
 ```
 
+한 블럭을 통해 확인해보자.
+
 ```{r}
 i = 4
 ```
@@ -359,22 +364,7 @@ final %>%
   labs(color = NULL)
 ```
 
-다음 반복을 위한 초깃값일 뿐.
-
-
-```{r}
-final %>%
-  mutate(part = format(as.POSIXct(part, format = "%H:%M"), "%H")) %>%
-  group_by(store_id, part) %>%
-  summarise(times = sum(times)) %>%
-  filter(store_id == nn)
-
-final %>%
-  mutate(part = as.POSIXct(part, format = "%H:%M")) %>% head
-  group_by(store_id, part) %>%
-  summarise(times = sum(times)) %>%
-  filter(store_id == nn)
-```
+4-4. 1개씩 확인해보자.
 
 ```{r}
 nn = 40
@@ -393,67 +383,624 @@ final %>% filter(store_id == nn) %>%
   # scale_x_datetime(breaks = date_breaks("1 min"), labels = date_format("%H:%M"))
 ```
 
-아주 다행히 다들 선이 잘 나오는 듯하다. 난 안 나와서 별 짓을 했지만, 다행.
-
-- 40: 타입 1, 점심에 급격히, 저녁도 못 미치지만, 30 정도의 상승세를 보임.
-- 41: 타입 6, 음. 바닥을 김.
-- 42: 타입 4, 전형적인 낮에는 매출이 없고, 저녁에 그것도 6시 이후에 매출이 상승하는 형태.
-- 43: 타입 5, 전체적으로 매출이 있는 형태
-- 44: 타입 3, 굉장히 작은 횟수지만, 점심 ~ 낮에 매출이 뛴다.
-- 45: 타입 6, 아침, 낮, 이른 저녁까지 매출이 없음.
-- 46: 타입 4, 천천히 오르다 저녁에 피크를 찍는다.
-- 47: 타입 6, 45와 동일
-- 48: 타입 4, 저녁 그것도 이른 밤부터 매출이 미친 듯이 뛴다.
-- 49: 타입 1, 그림에선 제대로 보이지 않지만, 정확히 점심과 저녁에 매출이 뛴다.
-- 50: 타입 4, 46과 동일
-- 51: 타입 6, 45와 동일
-- 52: 타입 1, 완전 정확하지 않지만, 타입 4보단 1인 것 같다.
-- 53: 타입 6, 45와 동일인데, 매출이 많은 편인 45?
-- 54: 타입 1, 일단 쌍봉으로 본다, 저녁에 매출에 더 큰 편. 52랑 유사.
-- 55: 타입 1, 54와 동일
-- 56: 타입 1, 54와 동일
-- 57: 타입 4, 상대적으로 저녁이 매우 매출이 높음.
-- 58: 타입 1, 완벽한 쌍봉, 그것도 점심의 매출이 높은.
-- 59: 타입 4, 이 가게는 새벽 매출도 꽤 높은 편.
-- 60: 타입 4, 59와 동일
-- 61: 타입 4, 저녁보다는 밤에 매출이 많은 듯 보이지만, 일단 그림상 4에 속함.
-- 62: 타입 1, 점심이 높은 쌍봉.
-- 63: 타입 1, 매출이 많다면 완벽한 쌍봉일 것 같은 느낌.
-- 64: 타입 6, 45와 동일
-- 65: 타입 6, 45의 매출이 많은 버전?
-- 66: 타입 6, 45 패턴, 45의 매출이 살짝 많은 버전.
-- 67: 타입 5, 매출이 너무 고르다, 너무너무.
-- 68: 타입 4, 저녁 매출만 있다.
-- 69: 타입 5, 어떻게 이렇게 매출이 고를 수가 있지.
-- 70: 타입 4, 적당히 적은 매출.
-- 71: 타입 5, 이른 아침엔 매출이 없지만, 굉장히 고른 매출.
-- 72: 타입 1, 일단 쌍봉이긴 한데, 점심 매출이 최고다.
-- 73: 타입 6, 45와 동일인데, 이 유형 술집인가.
-- 74: 타입 1, 쌍봉, 아름다운 쌍봉.
-- 75: 타입 4, 46과 동일.
-- 76: 타입 4, 46과 동일.
-- 77: 타입 4, 46과 동일. 매출이 전체적으로 많은 버전.
-- 78: 타입 1, 총합 매출은 점심이 많지만, 순간 매출은 저녁이 높은 쌍봉.
-- 79: 타입 3, 딱 2개밖에 못 본 점심 피크 후 (천천히) 줄어드는 매출.
-
-번외: 그림으로 저장하기
+내꺼 부분 하나씩 확인
 
 ```{r}
-for (i in 4:7) {
-  start = i * 10
-  finish = start + 9
-  name = paste("test_part_line_", start, "-", finish, ".jpg", sep = "")
-  # name = paste("test_part_", start, "-", finish, ".jpg", sep = "")
-  jpeg(name, width = 600, height = 600)
-  plotting = final %>% filter(between(store_id, start, finish)) %>%
-    ggplot(aes(color = factor(store_id))) +
-    geom_line(aes(x = part, y = times, group = store_id)) +
-    # geom_point(aes(x = part, y = times)) +
-    labs(color = NULL)
+test_tt = read.csv(file.choose(), header = T, stringsAsFactors = F)
+part = test_tt %>% filter(between(store_id, 40, 79))
+final = part %>%
+  mutate(part = as.POSIXct(time, format = "%H:%M")) %>%
+  group_by(store_id, part) %>%
+  summarise(times = length(amount))
+```
+
+```{r}
+for (i in 40:79) {
+  name = paste(i, "point.jpg", sep = "")
+  jpeg(name, width = 1200, height = 600)
+  plotting = final %>%
+    filter(store_id == i) %>%
+    ggplot() +
+    geom_point(aes(x = part, y = times)) +
+    ggtitle(i) + 
+    scale_x_datetime(date_labels = "%H:%M")
   print(plotting)
   dev.off()
 }
 ```
 
 ```{r}
+test_tt %>%
+  group_by(store_id) %>%
+  summarise(times = length(amount))
+
+test_tt %>%
+  mutate(part = as.POSIXct(time, format = "%H:%M")) %>%
+  group_by(store_id, part = cut(part, "10 min")) %>%
+  summarise(times = length(amount))
+  ggplot(aes(color = factor(store_id))) +
+  geom_point(aes(x = part, y = times)) +
+  guides(color = F)
+```
+
+저장에 용이하도록
+
+```{r}
+name = paste("test.jpg", sep = "")
+jpeg(name, width = 1200, height = 600)
+plotting = test_tt %>%
+  mutate(part = as.POSIXct(time, format = "%H")) %>%
+  group_by(store_id, part) %>%
+  summarise(times = length(amount)) %>%
+  ggplot(aes(color = factor(store_id))) +
+  geom_point(aes(x = part, y = times)) +
+  scale_x_datetime(date_labels = "%H:%M") + 
+  guides(color = F)
+  print(plotting)
+  dev.off()
+```
+
+```{r}
+part = test_tt %>% filter(store_id == present)
+final = part %>%
+  mutate(part = as.POSIXct(time, format = "%H:%M")) %>%
+  group_by(store_id, part) %>%
+  summarise(times = length(amount))
+
+name = paste(present, "point.jpg", sep = "")
+jpeg(name, width = 1200, height = 600)
+plotting = final %>%
+    ggplot() +
+    geom_point(aes(x = part, y = times)) +
+    ggtitle(i) + 
+    scale_x_datetime(date_labels = "%H:%M")
+  print(plotting)
+  dev.off()
+```
+
+두번째 저장을 위한
+
+```{r}
+name = paste("total_a_week_line2.jpg", sep = "")
+jpeg(name, width = 1200, height = 600)
+plotting = total %>%
+  filter(cate != "일반 음식점") %>%
+  mutate(part = wday(transacted_date)) %>%
+  group_by(cate, part) %>%
+  summarise(times = length(amount)) %>%
+  ggplot(aes(color = cate)) +
+  geom_line(aes(x = part, y = times)) +
+  # scale_x_discrete(label = c("일", "월", "화", "수", "목", "금", "토")) +
+  labs(y = NULL, color = NULL)
+print(plotting)
+dev.off()
+```
+-->
+
+4. test 처음부터
+
+- 전체 판매 건수가 300 이하인 store_id는 판별 불가로 제외하기로 하였다.
+- 횟수가 적어서 패턴을 보기 어려우니까 10분 단위로 묶자.
+- 알아보기 쉽게 시간으로, 시간선 그리자.
+
+데이터 불러오기
+
+```{r}
+test_tt = read.csv(file.choose(), header = T, stringsAsFactors = F)
+test_tt %>% head
+```
+
+store_id 당 전체 판매 건수 확인 (맡은 거 확인)
+
+```{r}
+removed = test_tt %>%
+  group_by(store_id) %>%
+  summarise(times = length(amount)) %>%
+  filter(times >= 300) %>%
+  select(store_id)
+colnames(removed) = NULL
+removed = removed %>% unlist
+removed[65:96]
+```
+
+10분 단위로 판매 횟수를 묶기
+
+```{r}
+# test_part %>% head
+test_part = test_tt %>%
+  mutate(part = as.POSIXct(time, format = "%H:%M")) %>%
+  group_by(store_id, part = cut(part, "10 min")) %>% 
+  summarise(times = length(amount))
+```
+
+저장) boxplot 확인하고자
+
+```{r}
+for (i in 34) {
+  name = paste(i, ".jpg", sep = "")
+  jpeg(name, width = 600, height = 600)
+  
+  plotting = test_part %>%
+    filter(store_id == i) %>%
+    mutate(part = as.POSIXct(part)) %>%
+    ggplot(aes(x = part, y = times, color = factor(store_id))) +
+    geom_boxplot(outlier.color = "lightblue") +
+    geom_text(aes(label = times), hjust = -0.3)
+  
+  print(plotting)
+  dev.off()
+}
+```
+
+저장) 내 파트 저장하려고.
+
+```{r}
+limit = as.POSIXct(c("00:00", "24:00"), format = "%H:%M")
+time_line = as.POSIXct(c("9:00", "12:00", "15:00", "18:00", "21:00", "24:00"), format = "%H:%M")
+
+for (i in removed[65:96]) {
+  name = paste(i, ".jpg", sep = "")
+  jpeg(name, width = 1200, height = 600)
+  
+  plotting = test_part %>%
+    filter(store_id == i) %>%
+    mutate(part = as.POSIXct(part)) %>%
+    # 그림 그리기 시작
+    ggplot(aes(x = part, y = times, color = factor(store_id))) +
+    geom_point(size = 5) +
+    # 축 설정 및 선 그리기
+    scale_x_datetime(date_labels = "%H:%M", limits = limit) +
+    geom_vline(xintercept = time_line, linetype = 2) +
+    # label, legend, title
+    labs(x = NULL, y = NULL, color = NULL) +
+    ggtitle(i) +
+    # theme으로 legend 설정하기 싫은데, 다른 방법은 힘들다.
+    theme(legend.position = "none")
+  
+  print(plotting)
+  dev.off()
+}
+```
+
+저장) 뭉텅이로 요일
+
+```{r}
+# removed[65:96]
+for (i in 0:7) {
+  start = 65 + i * 4
+  finish = start + 3
+  
+  name = paste0(removed[start], "~", removed[finish], ".jpg")
+  jpeg(name, width = 800, height = 600)
+  
+  plotting = test_tt %>%
+    filter(store_id %in% removed[start:finish]) %>%
+    mutate(part = factor(wday(date))) %>%
+    group_by(store_id, part) %>%
+    summarise(times = length(amount)) %>%
+    ggplot(aes(color = factor(store_id))) +
+    geom_line(aes(x = part, y = times, group = store_id)) +
+    scale_x_discrete(label = c("일", "월", "화", "수", "목", "금", "토")) +
+    labs(x = NULL, y = NULL, color = NULL)
+  
+  print(plotting)
+  dev.off()
+}
+```
+
+이러다 좀 더 포괄적인 저장 함수 구현에 대해 신경 쓸 것만 같은 그런 느낌
+
+4-1. 다양하게 그림을 그려보자.
+
+```{r}
+total = read.csv(file.choose(), row.names = NULL, stringsAsFactors = F)
+total %>% colnames
+```
+
+date: transacted_date, transacted_time
+factor: (store_id, card_id,) card_company, installment_term(, region)
+continous: amount
+output: (type_of_business,) cate
+
+```{r}
+total %>%
+  group_by(transacted_time, card_company, cate) %>%
+  summarise(amount, refund = amount < 0) %>%
+  ggplot(aes(x = card_company, y = amount, color = cate, shape = refund)) +
+  geom_point() +
+  labs(x = NULL, y = NULL, color = NULL)
+```
+
+```{r}
+tt = total %>%
+  group_by(cate) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(refund = refund / (times - refund))
+
+# name = paste0("total_refund.jpg")
+# jpeg(name, width = 800, height = 600)
+# plotting = 
+tt %>%
+  ggplot(aes(x = cate, y = refund)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  labs(x = NULL, y = NULL, color = NULL) +
+  geom_text(aes(label = round(refund, 5)))
+
+# print(plotting)
+# dev.off()
+```
+
+시간별로 amount(or 카드 긁은 횟수)를 보는데, card_company는 모양으로, cate는 색으로?
+
+```{r}
+total %>%
+  group_by(card_company, cate, transacted_time) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(part = as.POSIXct(transacted_time, format = "%H:%M")) %>%
+  ggplot(aes(x = part, y = times, color = cate, shape = card_company)) +
+  geom_point() +
+  scale_x_datetime(date_labels = "%H:%M") + 
+  labs(x = NULL, y = NULL, color = NULL)
+```
+
+카드 회사별로 소비자의 소비 category를 시각화한 건데, 실패
+
+업종 -> (어떤 과정에 쓰일 특징 증거들)
+store_id -> (어떤 과정) -> 업종
+
+```{r}
+total %>%
+  group_by(card_company, cate) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  ggplot(aes(x = card_company, y = times, fill = cate)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(x = NULL, y = NULL, color = NULL)
+```
+
+4-2. 유형 확인
+
+```{r}
+test = read.csv(file.choose(), row.names = NULL, stringsAsFactors = F)
+test %>% colnames
+```
+
+```{r}
+test_part = test %>%
+  mutate(part = as.POSIXct(time, format = "%H:%M")) %>%
+  group_by(store_id, part = cut(part, "10 min")) %>% 
+  summarise(times = length(amount)) %>% head
+```
+
+4-3. 나눈 유형에 업종을 붙여보자.
+
+```{r}
+betweens1 = c(4, 6, 8, 13, 16, 19, 22, 23, 31, 35, 38, 40, 54, 55, 56, 58, 62, 72, 74, 81, 85, 101, 117, 118, 120, 135, 137, 139, 143, 148, 149, 154, 155, 156, 158, 163, 177, 179, 180, 182, 184, 190, 193, 194, 78, 106, 151, 166, 176)
+
+betweens2 = c(79, 100, 116, 142, 152, 160)
+
+betweens3 = c(0, 2, 3, 12, 14, 15, 17, 18, 24, 30, 37, 39, 42, 48, 49, 50, 53, 59, 60, 61, 65, 66, 68, 73, 86, 90, 91, 96, 98, 99, 102, 104, 109, 112, 115, 119, 123, 125, 128, 132, 134, 159, 161, 169, 174, 178, 185, 186, 188, 191, 195, 10, 20, 25, 45) # 88
+
+betweens4 = c(172)
+betweens5 = c(11, 69, 80, 82, 87, 103, 105, 107, 110, 114, 122, 131, 140, 144, 153, 162, 165, 167)
+betweens6 = c(34)
+```
+
+```{r}
+name = paste0("betweens3_without_88.jpg")
+jpeg(name, width = 800, height = 600)
+
+plotting = test_part %>%
+  filter(store_id %in% betweens3) %>%
+  mutate(part = as.POSIXct(part)) %>%
+  ggplot(aes(color = factor(store_id))) +
+  geom_point(aes(x = part, y = times)) +
+  scale_x_datetime(date_labels = "%H:%M") +
+  ggtitle("3유형") +
+  labs(x = NULL, y = NULL, color = NULL) #+
+  #guides(color = F)
+  
+print(plotting)
+dev.off()
+```
+
+4-4. 모비율 검정
+
+```{r}
+temp = read.xlsx(file.choose(), stringsAsFactors = F, header = T, sheetIndex = 2, encoding = "UTF-8")
+temp %>% head
+```
+
+```{r eval = F}
+tt = total %>%
+  group_by(cate) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(refund = refund / (times - refund))
+colnames(tt) = NULL
+tt %>% .[1, 2:3]
+tt %>% .[, 1] %>% unlist
+tt
+```
+
+4-4-1.여기서부터는 유형별로 다릅니다.
+
+```{r}
+x_part = 0; n = 0
+for (i in c(6, 9)) {
+  x_part = x_part + unlist(tt[i, 2]) * unlist(tt[i, 3])
+  n = n + unlist(tt[i, 2])
+}
+x_part; n
+```
+
+나눈 유형별로 비율 따오자.
+
+```{r}
+tt1 = test %>%
+  filter(store_id %in% betweens1) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(refund = refund / (times - refund))
+colnames(tt1) = NULL
+tt1
+```
+
+```{r}
+prop2 = unlist(tt1[2])
+n = c(n, unlist(tt1[1]))
+x = c(x_part, prop2 * unlist(tt1[1]))
+prop.test(x = x, n = n, alternative = c("two.sided"), conf.level = 0.95)
+```
+
+<!-- 출처: https://rfriend.tistory.com/129 [R, Python 분석과 프로그래밍의 친구 (by R Friend)]
+prop <- c(0.33, 0.41) # proportion of events
+n <- c(500, 600) # number of trials
+x <- prop*n # number of events
+
+prop.test(x = x, # number of events
++           n = n, # number of trials
++           alternative = c("two.sided"), # alternative = c("two.sided", "less", "greater")
++           conf.level = 0.95) # confidence level (= 1- significance level 'alpha') -->
+
+4-4-2. 표로 이쁘게 뽑아보자.
+
+```{r}
+tt = total %>%
+  group_by(cate) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+colnames(tt) = NULL
+tt
+```
+
+```{r}
+tt1[1, ] = test %>%
+  filter(store_id %in% betweens1) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[2, ] = test %>%
+  filter(store_id %in% betweens2) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[3, ] = test %>%
+  filter(store_id %in% betweens3) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[4, ] = test %>%
+  filter(store_id %in% betweens4) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[5, ] = test %>%
+  filter(store_id %in% betweens5) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+# write.csv(tt, "total_refund_ratio.csv")
+# write.csv(tt1, "test_refund_ration.csv")
+tt1
+```
+
+6, 9 / 11 / 4 / 8, 3 / 2 / 1
+
+```{r}
+x = 0
+n = 0
+for (i in c(6, 9)) {
+  x = x + unlist(tt[i, 3])
+  n = n + unlist(tt[i, 2])
+}
+
+prop.test(x = c(unlist(tt1[1, 2]), x), n = c(unlist(tt1[1, 1]), n),
+          alternative = c("two.sided"), conf.level = 0.95)
+```
+
+```{r eval = F}
+p = x / n
+p
+prop.test(x = unlist(tt1[1, 2]), n = unlist(tt1[1, 1]), p = p,
+          alternative = c("two.sided"), conf.level = 0.95)
+```
+
+---
+
+4-4-3. 다시 확인
+
+test data 정제
+
+```{r}
+# test data
+test = read.csv(file.choose(), stringsAsFactors = F, header = T)
+test %>% head
+```
+
+```{r}
+dd = test %>% filter(업종번호 == 6) %>% select(store_id) %>% unique
+colnames(dd) = NULL
+dd %>% unlist
+```
+
+```{r}
+# test %>% filter(업종번호 == 6) %>% select(store_id) %>% unique %>% as.list %>% .[[1]] %>% length
+
+tt1[1, ] = test %>%
+  filter(업종번호 == 1) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[2, ] = test %>%
+  filter(업종번호 == 2) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[3, ] = test %>%
+  filter(업종번호 == 3) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[4, ] = test %>%
+  filter(업종번호 == 4) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[5, ] = test %>%
+  filter(업종번호 == 5) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1[6, ] = test %>%
+  filter(업종번호 == 6) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt1
+```
+
+train data 정제
+
+```{r}
+total = read.csv(file.choose(), stringsAsFactors = F, header = T)
+total %>% head
+total %>% colnames
+```
+```{r}
+total %>% select(cate) %>% unique %>% .[1] %>% unlist
+```
+
+```{r}
+tt = total %>%
+  filter(cate %in% c("일반 음식점", "음식소매업")) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+colnames(tt) = NULL
+
+tt[2, ] = total %>%
+  filter(cate %in% c("휴게 음식점")) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt[3, ] = total %>%
+  filter(cate %in% c("오락 및 여가")) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt[4, ] = total %>%
+  filter(cate %in% c("의류", "서비스업")) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt[5, ] = total %>%
+  filter(cate %in% c("미용")) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt[6, ] = total %>%
+  filter(cate %in% c("교육")) %>%
+  summarise(times = length(amount), refund = sum(amount < 0)) %>%
+  mutate(times = times - refund)
+tt
+```
+
+```{r}
+tt1
+```
+
+- 6, 9 / 11 / 4 / 8, 3 / 2 / 1
+
+하나씩 확인해보자.
+
+```{r}
+index = 5
+x = c(unlist(tt[index, 2]), unlist(tt1[index, 2]))
+n = c(unlist(tt[index, 1]), unlist(tt1[index, 1]))
+prop.test(x = x, n = n, alternative = c("two.sided"), conf.level = 0.95)
+```
+
+```{r}
+to_csv = c()
+for (index in 1:6) {
+  x = c(unlist(tt[index, 2]), unlist(tt1[index, 2]))
+  n = c(unlist(tt[index, 1]), unlist(tt1[index, 1]))
+  # prop.test(x = x, n = n, alternative = c("two.sided"), conf.level = 0.95)
+  summ = prop.test(x = x, n = n, alternative = c("two.sided"), conf.level = 0.95)
+  temp = bind_cols(index, x[1], n[1], x[2], n[2], summ$conf.int[1], summ$conf.int[2], summ$p.value)
+  to_csv = bind_rows(to_csv, temp)
+}
+colnames(to_csv) = c("index", "total_events", "total_times", "test_events", "test_times", "conf_low", "conf_high", "p_value")
+to_csv
+```
+```{r}
+write.csv(to_csv, "prop_hypothesis.csv", sep = ",")
+```
+
+---
+
+#### 추가) 그림 뽑아주려고.
+
+특정 카테고리 그림 뽑기
+
+```{r}
+# name = paste("total_미용.jpg", sep = "")
+# jpeg(name, width = 1000, height = 600)
+# plotting = 
+total %>%
+  filter(cate %in% c("의류")) %>%
+  group_by(transacted_time) %>% 
+  summarise(times = length(amount)) %>%
+  mutate(part = as.POSIXct(transacted_time, format = "%H:%M")) %>%
+  ggplot(aes(color = "red")) +
+  geom_point(aes(x = part, y = times)) +
+  scale_x_datetime(date_labels = "%H:%M") +
+  scale_y_continuous(limits = c(0, 1000)) +
+  labs(x = NULL, y = NULL, color = NULL) +
+  guides(color = F)
+# print(plotting)
+# dev.off()
+```
+
+업종번호에 따라 다르게
+
+```{r}
+name = paste0("test_custom2.jpg")
+jpeg(name, width = 1200, height = 600)
+plotting = test %>%
+  group_by(업종번호, time) %>%
+  summarise(times = length(amount)) %>%
+  filter(업종번호 != "") %>%
+  mutate(part = as.POSIXct(time, format = "%H:%M")) %>%
+  ggplot(aes(color = factor(업종번호))) +
+  geom_point(aes(x = part, y = times)) +
+  scale_x_datetime(date_labels = "%H:%M") +
+  labs(x = NULL, y = NULL, color = NULL)
+print(plotting)
+dev.off()
+```
+
+특정 store_id 그림
+
+```{r}
+for (present in c(34)) {
+  name = paste0(present, "_test.jpg")
+  jpeg(name, width = 800, height = 600)
+  
+  plotting = test %>%
+    filter(store_id == present) %>%
+    group_by(time) %>%
+    summarise(times = length(amount)) %>%
+    mutate(part = as.POSIXct(time, format = "%H:%M")) %>%
+    ggplot() +
+    geom_point(aes(x = part, y = times), color = "forestgreen") +
+    scale_x_datetime(date_labels = "%H:%M") +
+    labs(x = NULL, y = NULL, color = NULL)
+
+  print(plotting)
+  dev.off()
+}
 ```
